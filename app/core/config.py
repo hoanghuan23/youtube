@@ -1,0 +1,24 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    database_url: str = "sqlite:///./data/youtube.db"
+    youtube_api_key: str | None = None
+    scheduler_enabled: bool = True
+    scheduler_interval_seconds: int = 120
+    scheduler_source_batch_size: int = 15
+    scheduler_video_batch_size: int = 30
+    metric_num_workers: int = 1
+    metric_max_retries: int = 3
+    metric_retry_delay_seconds: int = 10
+    metric_request_delay_seconds: float = 1
+    metric_timeout_seconds: int = 8
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

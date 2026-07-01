@@ -14,8 +14,7 @@ class SourceCreate(BaseModel):
     identifier: str = Field(min_length=1, max_length=255)
     display_name: str | None = None
     youtube_url: str | None = None
-    max_days_old: int | None = Field(default=1, ge=1)
-    schedule_override_minutes: int | None = Field(default=None, ge=1)
+    max_days_old: int | None = Field(default=7, ge=1)
 
 
 class SourceUpdate(BaseModel):

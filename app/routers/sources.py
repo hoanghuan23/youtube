@@ -46,7 +46,6 @@ def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Sourc
         is_active=True,
         is_accessible=True,
         max_days_old=payload.max_days_old,
-        schedule_override_minutes=payload.schedule_override_minutes,
         created_at=_now(),
     )
     db.add(source)

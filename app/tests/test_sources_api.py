@@ -25,3 +25,21 @@ def test_health_and_source_crud(client):
 def test_invalid_source_type_rejected(client):
     response = client.post("/sources", json={"source_type": "user", "identifier": "demo"})
     assert response.status_code == 422
+
+
+def test_schedule_override_only_updates_via_patch(client):
+    created = client.post(
+        "/sources",
+        json={
+            "source_type": "channel",
+            "identifier": "@demo",
+            "schedule_override_minutes": 1,
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["schedule_override_minutes"] is None
+
+    source_id = created.json()["id"]
+    patched = client.patch(f"/sources/{source_id}", json={"schedule_override_minutes": 1})
+    assert patched.status_code == 200
+    assert patched.json()["schedule_override_minutes"] == 1

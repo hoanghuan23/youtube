@@ -1,3 +1,13 @@
+import pytest
+
+from app.routers import sources as sources_router
+
+
+@pytest.fixture(autouse=True)
+def mock_channel_info(monkeypatch):
+    monkeypatch.setattr(sources_router.youtube_channel_about, "extract_channel_info", lambda _url: None)
+
+
 def test_health_and_source_crud(client):
     assert client.get("/health").json() == {"status": "ok"}
 
@@ -6,6 +16,8 @@ def test_health_and_source_crud(client):
     assert created.status_code == 201
     source_id = created.json()["id"]
     assert created.json()["identifier"] == "demo"
+    assert created.json()["subscriber_count"] is None
+    assert created.json()["view_count"] is None
 
     duplicate = client.post("/sources", json=payload)
     assert duplicate.status_code == 400
@@ -43,3 +55,57 @@ def test_schedule_override_only_updates_via_patch(client):
     patched = client.patch(f"/sources/{source_id}", json={"schedule_override_minutes": 1})
     assert patched.status_code == 200
     assert patched.json()["schedule_override_minutes"] == 1
+
+
+def test_create_channel_source_updates_source_metrics(client, monkeypatch):
+    def fake_extract_channel_info(url):
+        assert url == "https://www.youtube.com/@demo"
+        return {
+            "channel_title": "Demo Channel",
+            "subscriber_count": 123_000,
+            "view_count": 4_560_000,
+        }
+
+    monkeypatch.setattr(sources_router.youtube_channel_about, "extract_channel_info", fake_extract_channel_info)
+
+    created = client.post("/sources", json={"source_type": "channel", "identifier": "@demo"})
+
+    assert created.status_code == 201
+    assert created.json()["display_name"] == "Demo Channel"
+    assert created.json()["subscriber_count"] == 123_000
+    assert created.json()["view_count"] == 4_560_000
+
+    listed = client.get("/sources")
+    assert listed.status_code == 200
+    assert listed.json()[0]["subscriber_count"] == 123_000
+    assert listed.json()[0]["view_count"] == 4_560_000
+
+
+def test_create_channel_source_keeps_null_metrics_when_fetch_fails(client, monkeypatch):
+    def raise_extract_channel_info(_url):
+        raise RuntimeError("youtube unavailable")
+
+    monkeypatch.setattr(sources_router.youtube_channel_about, "extract_channel_info", raise_extract_channel_info)
+
+    created = client.post("/sources", json={"source_type": "channel", "identifier": "@demo"})
+
+    assert created.status_code == 201
+    assert created.json()["subscriber_count"] is None
+    assert created.json()["view_count"] is None
+
+
+def test_create_non_channel_source_does_not_fetch_channel_info(client, monkeypatch):
+    def raise_extract_channel_info(_url):
+        raise AssertionError("channel info should not be fetched")
+
+    monkeypatch.setattr(sources_router.youtube_channel_about, "extract_channel_info", raise_extract_channel_info)
+
+    keyword = client.post("/sources", json={"source_type": "keyword", "identifier": "python"})
+    playlist = client.post("/sources", json={"source_type": "playlist", "identifier": "PL123"})
+
+    assert keyword.status_code == 201
+    assert keyword.json()["subscriber_count"] is None
+    assert keyword.json()["view_count"] is None
+    assert playlist.status_code == 201
+    assert playlist.json()["subscriber_count"] is None
+    assert playlist.json()["view_count"] is None

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,9 +8,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Source
 from app.schemas.sources import SourceCreate, SourceRead, SourceUpdate
+from app.services import youtube_channel_about
 
 
 router = APIRouter(prefix="/sources", tags=["sources"])
+logger = logging.getLogger("youtube_api.sources")
 
 
 def _now() -> datetime:
@@ -35,14 +38,36 @@ def _source_url(source_type: str, identifier: str, explicit_url: str | None = No
     return None
 
 
+def _fetch_channel_info(youtube_url: str | None) -> dict | None:
+    if not youtube_url:
+        return None
+    try:
+        return youtube_channel_about.extract_channel_info(youtube_url)
+    except Exception as exc:
+        logger.warning("Unable to fetch YouTube channel info for %s: %s", youtube_url, exc)
+        return None
+
+
 @router.post("", response_model=SourceRead, status_code=status.HTTP_201_CREATED)
 def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Source:
     identifier = _normalize_identifier(payload.source_type, payload.identifier)
+    existing = (
+        db.query(Source)
+        .filter(Source.source_type == payload.source_type, Source.identifier == identifier)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Source already exists")
+
+    youtube_url = _source_url(payload.source_type, identifier, payload.youtube_url)
+    channel_info = _fetch_channel_info(youtube_url) if payload.source_type == "channel" else None
     source = Source(
         source_type=payload.source_type,
         identifier=identifier,
-        display_name=payload.display_name,
-        youtube_url=_source_url(payload.source_type, identifier, payload.youtube_url),
+        display_name=payload.display_name or (channel_info or {}).get("channel_title"),
+        youtube_url=youtube_url,
+        subscriber_count=(channel_info or {}).get("subscriber_count"),
+        view_count=(channel_info or {}).get("view_count"),
         is_active=True,
         is_accessible=True,
         max_days_old=payload.max_days_old,

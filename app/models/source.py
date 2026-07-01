@@ -13,6 +13,8 @@ class Source(Base):
     identifier = Column(String(255), nullable=False)
     display_name = Column(String(255))
     youtube_url = Column(String(500))
+    subscriber_count = Column(Integer)
+    view_count = Column(Integer)
     is_active = Column(Boolean, default=True)
     is_accessible = Column(Boolean)
     max_days_old = Column(Integer)

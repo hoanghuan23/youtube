@@ -33,6 +33,8 @@ class SourceRead(ORMBaseModel):
     identifier: str
     display_name: str | None = None
     youtube_url: str | None = None
+    subscriber_count: int | None = None
+    view_count: int | None = None
     is_active: bool | None = None
     is_accessible: bool | None = None
     max_days_old: int | None = None

@@ -166,7 +166,7 @@ class YouTubeClient:
                 continue
             item = self._extract_video_info(video_url)
             if since_naive and item.published_at and item.published_at < since_naive:
-                continue
+                break
             if channel_videos_url.endswith("/shorts") and item.video_type == "long":
                 item.video_type = "short"
             videos.append(item)

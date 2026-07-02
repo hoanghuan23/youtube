@@ -106,7 +106,7 @@ def calculate_next_scrape_interval(
     tier = schedule_tier or 1
     load_multiplier = 1 if total_active_sources <= 50 else 1.5
     minutes = int(BASE_INTERVAL_MINUTES.get(source_type, 120) * TIER_MULTIPLIER.get(tier, 1) * load_multiplier)
-    return timedelta(minutes=max(15, min(360, minutes)))
+    return timedelta(minutes=max(15, min(1500, minutes)))
 
 
 def refresh_source_schedule(db: Session, source: Source, now: datetime) -> None:

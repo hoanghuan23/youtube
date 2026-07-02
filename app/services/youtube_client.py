@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from yt_dlp.utils import DownloadError
+
 from sqlalchemy.orm import Session
+
+
+logger = logging.getLogger("youtube_api.youtube_client")
 
 
 @dataclass(slots=True)
@@ -104,6 +110,17 @@ class YouTubeClient:
 
         return YoutubeDL
 
+    @staticmethod
+    def _is_skippable_video_error(error: DownloadError) -> bool:
+        msg = str(error).lower()
+        return (
+            "premieres in" in msg
+            or "premiere" in msg
+            or "private video" in msg
+            or "video unavailable" in msg
+            or "members-only" in msg
+        )
+
     def _extract_raw_video_info(self, video_url: str) -> dict[str, Any]:
         YoutubeDL = self._load_youtube_dl()
         ydl_opts = {
@@ -175,7 +192,15 @@ class YouTubeClient:
             video_url = self._video_url(flat_item)
             if not video_url:
                 continue
-            item = self._extract_video_info(video_url)
+            try:
+                item = self._extract_video_info(video_url)
+            except DownloadError as e:
+                if self._is_skippable_video_error(e):
+                    logger.warning("Skip unavailable YouTube video | url=%s error=%s", video_url, e)
+                    continue
+                logger.warning("Error extracting YouTube video info | url=%s error=%s", video_url, e)
+                continue
+
             if since_naive and item.published_at and item.published_at < since_naive:
                 break
             if channel_videos_url.endswith("/shorts") and item.video_type == "long":

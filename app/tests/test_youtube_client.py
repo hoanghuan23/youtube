@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import pytest
+from yt_dlp.utils import DownloadError
 
 from app.services.youtube_client import YouTubeClient, YouTubeVideoItem
 
@@ -156,3 +157,48 @@ def test_extract_channel_videos_stops_at_first_video_older_than_since(monkeypatc
 
     assert [video.youtube_video_id for video in videos] == ["recent"]
     assert calls == ["recent", "old"]
+
+
+def test_extract_channel_videos_skips_unreleased_premiere(monkeypatch):
+    client = YouTubeClient()
+
+    class FakeYoutubeDL:
+        def __init__(self, _opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, _url, download=False):
+            assert download is False
+            return {
+                "entries": [
+                    {"id": "ready"},
+                    {"id": "premiere"},
+                    {"id": "after-premiere"},
+                ]
+            }
+
+    def fake_extract_video_info(video_url):
+        video_id = video_url.rsplit("=", 1)[-1]
+        if video_id == "premiere":
+            raise DownloadError("This live event will begin in a few moments. Premieres in 2 hours")
+        return YouTubeVideoItem(
+            youtube_video_id=video_id,
+            youtube_url=video_url,
+            published_at=datetime(2026, 1, 10),
+        )
+
+    monkeypatch.setattr(client, "_load_youtube_dl", lambda: FakeYoutubeDL)
+    monkeypatch.setattr(client, "_extract_video_info", fake_extract_video_info)
+
+    videos = client._extract_channel_videos(
+        "https://www.youtube.com/@demo/videos",
+        max_count=30,
+        since=None,
+    )
+
+    assert [video.youtube_video_id for video in videos] == ["ready", "after-premiere"]

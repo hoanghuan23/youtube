@@ -78,6 +78,7 @@ def test_extract_video_info_maps_yt_dlp_video_data(monkeypatch):
                 "comment_count": 7,
                 "thumbnail": "https://img.youtube.com/demo.jpg",
                 "tags": ["tag-a"],
+                "categories": ["Music"],
             }
 
     monkeypatch.setattr(client, "_load_youtube_dl", lambda: FakeYoutubeDL)
@@ -102,6 +103,7 @@ def test_extract_video_info_maps_yt_dlp_video_data(monkeypatch):
         "channel_url": "https://www.youtube.com/@demo",
     }
     assert item.metrics == {"views_count": 1234, "likes_count": 56, "comments_count": 7}
+    assert item.categories == '["Music"]'
 
 
 def test_extract_channel_videos_stops_at_first_video_older_than_since(monkeypatch):

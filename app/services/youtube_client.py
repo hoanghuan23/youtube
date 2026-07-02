@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -20,6 +21,15 @@ class YouTubeVideoItem:
     channel: dict[str, Any] | None = None
     metrics: dict[str, int | None] | None = None
     tags: list[str] | None = None
+    categories: str | None = None
+
+
+def serialize_categories(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
 
 
 class YouTubeClient:
@@ -134,6 +144,7 @@ class YouTubeClient:
                 "comments_count": info.get("comment_count"),
             },
             tags=info.get("tags") or info.get("categories"),
+            categories=serialize_categories(info.get("categories")),
         )
 
     def _extract_channel_videos(

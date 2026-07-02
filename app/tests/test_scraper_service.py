@@ -16,6 +16,7 @@ def test_crawl_source_with_videos_creates_video_metric_and_job(db_session):
         youtube_url="https://www.youtube.com/watch?v=abc123",
         title="Demo",
         description="#python video",
+        categories='["Music"]',
         published_at=datetime.utcnow(),
         metrics={"views_count": 50_000, "likes_count": 100, "comments_count": 10},
     )
@@ -28,8 +29,33 @@ def test_crawl_source_with_videos_creates_video_metric_and_job(db_session):
     assert job.videos_new == 1
     assert db_session.query(Video).count() == 1
     assert db_session.query(VideoMetric).count() == 1
+    assert db_session.query(Video).one().categories == '["Music"]'
     assert cache.total_videos == 1
     assert cache.total_views == 50_000
     assert cache.top_video_id == "abc123"
     assert source.schedule_tier == 3
     assert source.next_scrape is not None
+
+
+def test_crawl_source_with_videos_serializes_dict_categories(db_session):
+    source = Source(source_type="channel", identifier="demo", is_active=True, is_accessible=True, created_at=datetime.utcnow())
+    db_session.add(source)
+    db_session.commit()
+    db_session.refresh(source)
+
+    job = crawl_source_with_videos(
+        db_session,
+        source,
+        [
+            {
+                "video_id": "dict123",
+                "url": "https://www.youtube.com/watch?v=dict123",
+                "title": "Dict demo",
+                "categories": ["Education"],
+                "published_at": datetime.utcnow(),
+            }
+        ],
+    )
+
+    assert job.status == "done"
+    assert db_session.query(Video).one().categories == '["Education"]'

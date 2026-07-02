@@ -21,6 +21,7 @@ class VideoRead(ORMBaseModel):
     youtube_url: str
     title: str | None = None
     description: str | None = None
+    categories: str | None = None
     published_at: datetime
     duration_seconds: int | None = None
     video_type: str | None = None

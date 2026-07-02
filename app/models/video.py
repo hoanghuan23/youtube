@@ -14,6 +14,7 @@ class Video(Base):
     youtube_url = Column(String(500), nullable=False)
     title = Column(String(500))
     description = Column(Text)
+    categories = Column(Text)
     published_at = Column(DateTime, nullable=False)
     duration_seconds = Column(Integer)
     video_type = Column(String(20), default="long")

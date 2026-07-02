@@ -115,6 +115,8 @@ CREATE TABLE videos (
     title VARCHAR(500),
     description TEXT,
 
+    categories TEXT,
+
     published_at DATETIME NOT NULL,
 
     duration_seconds INTEGER,

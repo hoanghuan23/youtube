@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Channel, PipelineJob, PipelineLog, Source, TaskLog, Video, VideoMetric
 from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule, upsert_source_analytics_cache
-from app.services.youtube_client import YouTubeClient, YouTubeVideoItem
+from app.services.youtube_client import YouTubeClient, YouTubeVideoItem, serialize_categories
 
 
 logger = logging.getLogger("youtube_api.scraper")
@@ -50,6 +50,7 @@ def _as_item(data: YouTubeVideoItem | dict[str, Any]) -> YouTubeVideoItem:
             "comments_count": data.get("comments_count") or data.get("comment_count"),
         },
         tags=data.get("tags"),
+        categories=serialize_categories(data.get("categories")),
     )
 
 
@@ -179,6 +180,7 @@ def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVi
                 duration_seconds=item.duration_seconds,
                 video_type=item.video_type,
                 thumbnail_url=item.thumbnail_url,
+                categories=item.categories,
                 created_at=_now(),
                 is_tracked=True,
                 is_deleted=False,

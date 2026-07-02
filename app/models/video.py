@@ -16,7 +16,6 @@ class Video(Base):
     description = Column(Text)
     published_at = Column(DateTime, nullable=False)
     duration_seconds = Column(Integer)
-    duration_text = Column(String(50))
     video_type = Column(String(20), default="long")
     thumbnail_url = Column(String(500))
     created_at = Column(DateTime)

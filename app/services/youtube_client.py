@@ -15,7 +15,6 @@ class YouTubeVideoItem:
     description: str | None = None
     published_at: datetime | None = None
     duration_seconds: int | None = None
-    duration_text: str | None = None
     video_type: str = "long"
     thumbnail_url: str | None = None
     channel: dict[str, Any] | None = None

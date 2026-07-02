@@ -23,7 +23,6 @@ class VideoRead(ORMBaseModel):
     description: str | None = None
     published_at: datetime
     duration_seconds: int | None = None
-    duration_text: str | None = None
     video_type: str | None = None
     thumbnail_url: str | None = None
     is_tracked: bool | None = None

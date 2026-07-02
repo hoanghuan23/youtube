@@ -52,9 +52,9 @@ CREATE TABLE sources (
 
     PRIMARY KEY (id),
 
-    CONSTRAINT uq_youtube_source UNIQUE (source_type, identifier),
+    CONSTRAINT uq_youtube_source_url UNIQUE (youtube_url),
     CONSTRAINT ck_youtube_sources_type 
-        CHECK (source_type IN ('channel', 'keyword'))
+        CHECK (source_type IN ('channel', 'keyword', 'playlist'))
 );
 
 CREATE INDEX idx_youtube_sources_active 
@@ -118,7 +118,6 @@ CREATE TABLE videos (
     published_at DATETIME NOT NULL,
 
     duration_seconds INTEGER,
-    duration_text VARCHAR(50),
 
     -- phân loại video
     -- long  : video dài

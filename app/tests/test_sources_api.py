@@ -149,3 +149,20 @@ def test_create_channel_source_from_videos_url_preserves_channel_and_url(client)
     assert created.status_code == 201
     assert created.json()["identifier"] == "vtv24"
     assert created.json()["youtube_url"] == "https://www.youtube.com/@vtv24/videos"
+
+
+def test_create_channel_sources_dedupes_by_url_not_identifier(client):
+    videos = client.post("/sources", json={"source_type": "channel", "identifier": "https://www.youtube.com/@vtv24/videos"})
+    shorts = client.post("/sources", json={"source_type": "channel", "identifier": "https://www.youtube.com/@vtv24/shorts"})
+    duplicate_videos = client.post(
+        "/sources",
+        json={"source_type": "channel", "identifier": "https://www.youtube.com/@vtv24/videos/"},
+    )
+
+    assert videos.status_code == 201
+    assert shorts.status_code == 201
+    assert videos.json()["identifier"] == "vtv24"
+    assert shorts.json()["identifier"] == "vtv24"
+    assert videos.json()["youtube_url"] == "https://www.youtube.com/@vtv24/videos"
+    assert shorts.json()["youtube_url"] == "https://www.youtube.com/@vtv24/shorts"
+    assert duplicate_videos.status_code == 400

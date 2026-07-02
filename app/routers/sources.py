@@ -39,7 +39,7 @@ def _normalize_identifier(source_type: str, identifier: str) -> str:
 
 def _source_url(source_type: str, identifier: str, explicit_url: str | None = None) -> str | None:
     if explicit_url:
-        return explicit_url.strip()
+        return explicit_url.strip().rstrip("/")
     if source_type == "channel":
         return f"https://www.youtube.com/@{identifier}"
     if source_type == "playlist":
@@ -60,18 +60,20 @@ def _fetch_channel_info(youtube_url: str | None) -> dict | None:
 @router.post("", response_model=SourceRead, status_code=status.HTTP_201_CREATED)
 async def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Source:
     identifier = _normalize_identifier(payload.source_type, payload.identifier)
-    existing = (
-        db.query(Source)
-        .filter(Source.source_type == payload.source_type, Source.identifier == identifier)
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=400, detail="Source already exists")
-
     explicit_url = payload.youtube_url
     if payload.source_type == "channel" and not explicit_url and payload.identifier.strip().startswith(("http://", "https://")):
         explicit_url = payload.identifier
     youtube_url = _source_url(payload.source_type, identifier, explicit_url)
+    existing = (
+        db.query(Source)
+        .filter(Source.youtube_url == youtube_url)
+        .first()
+        if youtube_url
+        else None
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Source already exists")
+
     channel_info = _fetch_channel_info(youtube_url) if payload.source_type == "channel" else None
     source = Source(
         source_type=payload.source_type,

@@ -6,7 +6,7 @@ from app.database import Base
 
 class Source(Base):
     __tablename__ = "sources"
-    __table_args__ = (UniqueConstraint("source_type", "identifier", name="uq_youtube_source"),)
+    __table_args__ = (UniqueConstraint("youtube_url", name="uq_youtube_source_url"),)
 
     id = Column(Integer, primary_key=True)
     source_type = Column(String(20), nullable=False)

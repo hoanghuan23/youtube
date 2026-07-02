@@ -94,7 +94,7 @@ class YouTubeClient:
 
         return YoutubeDL
 
-    def _extract_video_info(self, video_url: str) -> YouTubeVideoItem:
+    def _extract_raw_video_info(self, video_url: str) -> dict[str, Any]:
         YoutubeDL = self._load_youtube_dl()
         ydl_opts = {
             "quiet": True,
@@ -103,8 +103,10 @@ class YouTubeClient:
             "no_warnings": True,
         }
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
+            return ydl.extract_info(video_url, download=False) or {}
 
+    def _extract_video_info(self, video_url: str) -> YouTubeVideoItem:
+        info = self._extract_raw_video_info(video_url)
         channel_id = info.get("channel_id")
         channel_handle = info.get("uploader_id")
         channel = None

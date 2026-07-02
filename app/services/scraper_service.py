@@ -227,18 +227,33 @@ def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVi
 
 async def crawl_source(db: Session, source: Source, max_count: int = 30) -> PipelineJob:
     client = YouTubeClient(db)
-    if source.source_type == "channel":
-        videos = await client.get_channel_videos(source.identifier, max_count=max_count, since=_source_since(source))
-    elif source.source_type == "keyword":
-        videos = await client.get_keyword_videos(source.identifier, max_count=max_count)
-    elif source.source_type == "playlist":
-        videos = await client.get_playlist_videos(source.identifier, max_count=max_count)
-    else:
+    try:
+        if source.source_type == "channel":
+            videos = await client.get_channel_videos(source.youtube_url or source.identifier, max_count=max_count, since=_source_since(source))
+        elif source.source_type == "keyword":
+            videos = await client.get_keyword_videos(source.identifier, max_count=max_count)
+        elif source.source_type == "playlist":
+            videos = await client.get_playlist_videos(source.identifier, max_count=max_count)
+        else:
+            job = _create_job(db, source)
+            job.status = "failed"
+            job.error_message = f"Unsupported source_type={source.source_type}"
+            job.finished_at = _now()
+            db.commit()
+            db.refresh(job)
+            return job
+    except Exception as exc:
         job = _create_job(db, source)
         job.status = "failed"
-        job.error_message = f"Unsupported source_type={source.source_type}"
+        job.error_message = str(exc)
+        job.items_failed = 1
         job.finished_at = _now()
+        source.is_accessible = False
+        source.last_scraped = job.finished_at
+        add_job_log(db, job, "Fetch source videos failed", "ERROR", type(exc).__name__, str(exc))
+        add_task_log(db, job)
         db.commit()
         db.refresh(job)
+        logger.exception("Unable to fetch YouTube videos for source %s", source.id)
         return job
     return crawl_source_with_videos(db, source, videos)

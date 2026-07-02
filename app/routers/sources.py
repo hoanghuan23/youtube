@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +10,7 @@ from app.database import get_db
 from app.models import Source
 from app.schemas.sources import SourceCreate, SourceRead, SourceUpdate
 from app.services import youtube_channel_about
+from app.services.scraper_service import crawl_source
 
 
 router = APIRouter(prefix="/sources", tags=["sources"])
@@ -22,7 +24,14 @@ def _now() -> datetime:
 def _normalize_identifier(source_type: str, identifier: str) -> str:
     value = identifier.strip()
     if source_type == "channel":
-        return value.rstrip("/").split("/")[-1].lstrip("@") if "youtube.com" in value else value.lstrip("@")
+        if "youtube.com" in value:
+            parts = [part for part in urlparse(value).path.split("/") if part]
+            for part in parts:
+                if part.startswith("@"):
+                    return part.lstrip("@")
+            if parts:
+                return parts[0]
+        return value.lstrip("@")
     if source_type == "keyword":
         return value
     return value
@@ -49,7 +58,7 @@ def _fetch_channel_info(youtube_url: str | None) -> dict | None:
 
 
 @router.post("", response_model=SourceRead, status_code=status.HTTP_201_CREATED)
-def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Source:
+async def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Source:
     identifier = _normalize_identifier(payload.source_type, payload.identifier)
     existing = (
         db.query(Source)
@@ -59,7 +68,10 @@ def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Sourc
     if existing:
         raise HTTPException(status_code=400, detail="Source already exists")
 
-    youtube_url = _source_url(payload.source_type, identifier, payload.youtube_url)
+    explicit_url = payload.youtube_url
+    if payload.source_type == "channel" and not explicit_url and payload.identifier.strip().startswith(("http://", "https://")):
+        explicit_url = payload.identifier
+    youtube_url = _source_url(payload.source_type, identifier, explicit_url)
     channel_info = _fetch_channel_info(youtube_url) if payload.source_type == "channel" else None
     source = Source(
         source_type=payload.source_type,
@@ -79,6 +91,8 @@ def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Sourc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail="Source already exists") from exc
+    db.refresh(source)
+    await crawl_source(db, source)
     db.refresh(source)
     return source
 

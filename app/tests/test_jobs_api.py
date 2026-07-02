@@ -3,7 +3,7 @@ from datetime import datetime
 from app.models import Source, Video
 
 
-def test_jobs_api_crawl_and_get_job(client, monkeypatch):
+def test_jobs_api_crawl_and_get_job(client, db_session, monkeypatch):
     import app.services.scraper_service as scraper_service
 
     async def fake_channel_videos(self, identifier, max_count=30, since=None):
@@ -19,8 +19,12 @@ def test_jobs_api_crawl_and_get_job(client, monkeypatch):
 
     monkeypatch.setattr(scraper_service.YouTubeClient, "get_channel_videos", fake_channel_videos)
 
-    created = client.post("/sources", json={"source_type": "channel", "identifier": "demo"})
-    source_id = created.json()["id"]
+    source = Source(source_type="channel", identifier="demo", is_active=True, is_accessible=True, created_at=datetime.utcnow())
+    db_session.add(source)
+    db_session.commit()
+    db_session.refresh(source)
+
+    source_id = source.id
     job_response = client.post(f"/jobs/sources/{source_id}/crawl")
 
     assert job_response.status_code == 200

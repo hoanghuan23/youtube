@@ -1,11 +1,19 @@
 import pytest
 
+from app.models import Video, VideoMetric
 from app.routers import sources as sources_router
+from app.services.scraper_service import crawl_source_with_videos
+from app.services.youtube_client import YouTubeVideoItem
 
 
 @pytest.fixture(autouse=True)
 def mock_channel_info(monkeypatch):
     monkeypatch.setattr(sources_router.youtube_channel_about, "extract_channel_info", lambda _url: None)
+
+    async def fake_crawl_source(_db, _source, max_count=30):
+        return None
+
+    monkeypatch.setattr(sources_router, "crawl_source", fake_crawl_source)
 
 
 def test_health_and_source_crud(client):
@@ -109,3 +117,35 @@ def test_create_non_channel_source_does_not_fetch_channel_info(client, monkeypat
     assert playlist.status_code == 201
     assert playlist.json()["subscriber_count"] is None
     assert playlist.json()["view_count"] is None
+
+
+def test_create_source_bootstrap_crawls_videos(client, db_session, monkeypatch):
+    async def fake_crawl_source(db, source, max_count=30):
+        return crawl_source_with_videos(
+            db,
+            source,
+            [
+                YouTubeVideoItem(
+                    youtube_video_id="abc123",
+                    youtube_url="https://www.youtube.com/watch?v=abc123",
+                    title="Demo",
+                    metrics={"views_count": 100, "likes_count": 10, "comments_count": 2},
+                )
+            ],
+        )
+
+    monkeypatch.setattr(sources_router, "crawl_source", fake_crawl_source)
+
+    created = client.post("/sources", json={"source_type": "channel", "identifier": "@demo"})
+
+    assert created.status_code == 201
+    assert db_session.query(Video).count() == 1
+    assert db_session.query(VideoMetric).count() == 1
+
+
+def test_create_channel_source_from_videos_url_preserves_channel_and_url(client):
+    created = client.post("/sources", json={"source_type": "channel", "identifier": "https://www.youtube.com/@vtv24/videos"})
+
+    assert created.status_code == 201
+    assert created.json()["identifier"] == "vtv24"
+    assert created.json()["youtube_url"] == "https://www.youtube.com/@vtv24/videos"

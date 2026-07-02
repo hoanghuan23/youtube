@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import Channel, PipelineJob, PipelineLog, Source, TaskLog, Video, VideoMetric
-from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule
+from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule, upsert_source_analytics_cache
 from app.services.youtube_client import YouTubeClient, YouTubeVideoItem
 
 
@@ -207,6 +207,7 @@ def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVi
         job.status = "done"
         job.finished_at = _now()
         source.last_scraped = job.finished_at
+        upsert_source_analytics_cache(db, source, job.finished_at)
         refresh_source_schedule(db, source, job.finished_at)
         add_task_log(db, job)
         db.commit()

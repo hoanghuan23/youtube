@@ -1,5 +1,5 @@
 from yt_dlp import YoutubeDL
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 
@@ -49,12 +49,22 @@ def extract_youtube_video_info(video_url: str) -> dict[str, Any]:
         "like_count": info.get("like_count"),
         "comment_count": info.get("comment_count"),
         "thumbnail": info.get("thumbnail"),
-        "tags": info.get("tags"),
         "categories": info.get("categories"),
     }
 
+def is_video_within_days(video: dict[str, Any], days: int = 7) -> bool:
+    timestamp = video.get("timestamp")
 
-def extract_youtube_shorts(channel_shorts_url: str, limit: int = 15) -> list[dict[str, Any]]:
+    if not timestamp:
+        return False
+    
+    video_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    now = datetime.now(tz=timezone.utc)
+
+    return video_time >= now - timedelta(days=days)
+
+
+def extract_youtube_shorts(channel_shorts_url: str, days: int = 7, scan_limit: int = 30) -> list[dict[str, Any]]:
     """
     Extract latest shorts from a YouTube channel shorts tab.
 
@@ -65,7 +75,7 @@ def extract_youtube_shorts(channel_shorts_url: str, limit: int = 15) -> list[dic
         "quiet": True,
         "skip_download": True,
         "extract_flat": True,          # lấy danh sách URL trước, chưa lấy full metric
-        "playlistend": limit,          # chỉ lấy N video đầu tiên
+        "playlistend": scan_limit,          # chỉ lấy N video đầu tiên
         "ignoreerrors": True,
         # "no_warnings": True,
     }
@@ -76,7 +86,7 @@ def extract_youtube_shorts(channel_shorts_url: str, limit: int = 15) -> list[dic
     entries = playlist_info.get("entries") or []
     videos: list[dict[str, Any]] = []
 
-    for item in entries[:limit]:
+    for item in entries[:scan_limit]:
         if not item:
             continue
 
@@ -93,7 +103,11 @@ def extract_youtube_shorts(channel_shorts_url: str, limit: int = 15) -> list[dic
             continue
 
         try:
-            videos.append(extract_youtube_video_info(video_url))
+            video_data = extract_youtube_video_info(video_url)
+
+            if is_video_within_days(video_data, days=days):
+                videos.append(video_data)
+
         except Exception as exc:
             videos.append({
                 "video_id": video_id,
@@ -106,9 +120,10 @@ def extract_youtube_shorts(channel_shorts_url: str, limit: int = 15) -> list[dic
 
 if __name__ == "__main__":
     # url = "https://www.youtube.com/@Sontungmtp/videos" #video dài
-    url = "https://www.youtube.com/@vtv24/shorts"  # video shorts
+    # url = "https://www.youtube.com/@FPTBongDaOfficial/shorts"  # video shorts?
+    url = "https://www.youtube.com/@VTVGiaiTriOfficial/shorts"
 
-    shorts = extract_youtube_shorts(url, limit=5)
+    shorts = extract_youtube_shorts(url, days=7, scan_limit=30)
 
     print(f"Total shorts: {len(shorts)}")
     for index, video in enumerate(shorts, start=1):

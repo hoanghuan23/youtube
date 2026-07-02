@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models import PipelineJob, Source, Video, VideoMetric
 from app.services.scraper_service import add_job_log, add_task_log
-from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, upsert_source_analytics_cache
+from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule, upsert_source_analytics_cache
 from app.services.youtube_client import YouTubeClient
 
 
@@ -115,6 +115,7 @@ async def update_source_metrics(
             _record_metric(db, video, metrics, job, current_time)
             job.items_updated += 1
         upsert_source_analytics_cache(db, source, current_time)
+        refresh_source_schedule(db, source, current_time)
         job.status = "done"
         job.finished_at = _now()
         add_task_log(db, job)

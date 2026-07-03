@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.models import AnalyticsCache, Source, Video, VideoMetric
+from app.services import scraper_service
 from app.services.scraper_service import crawl_source_with_videos
 from app.services.youtube_client import YouTubeVideoItem
 
@@ -59,3 +60,31 @@ def test_crawl_source_with_videos_serializes_dict_categories(db_session):
 
     assert job.status == "done"
     assert db_session.query(Video).one().categories == '["Education"]'
+
+
+def test_source_since_uses_latest_published_at_as_exclusive_boundary(db_session):
+    source = Source(
+        source_type="channel",
+        identifier="demo",
+        is_active=True,
+        is_accessible=True,
+        max_days_old=30,
+        created_at=datetime.utcnow(),
+    )
+    db_session.add(source)
+    db_session.commit()
+    db_session.refresh(source)
+
+    latest_published_at = datetime.utcnow() - timedelta(hours=1)
+    db_session.add(
+        Video(
+            source_id=source.id,
+            youtube_video_id="existing",
+            youtube_url="https://www.youtube.com/watch?v=existing",
+            published_at=latest_published_at,
+            created_at=datetime.utcnow(),
+        )
+    )
+    db_session.commit()
+
+    assert scraper_service._source_since(db_session, source) == latest_published_at + timedelta(microseconds=1)

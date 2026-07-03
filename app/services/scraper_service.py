@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import PipelineJob, PipelineLog, Source, TaskLog, Video, VideoMetric
@@ -32,9 +33,18 @@ def _to_int(value: Any) -> int | None:
         return None
 
 
-def _source_since(source: Source) -> datetime:
+def _latest_source_published_at(db: Session, source: Source) -> datetime | None:
+    return db.query(func.max(Video.published_at)).filter(Video.source_id == source.id).scalar()
+
+
+def _source_since(db: Session, source: Source) -> datetime:
     max_days_old = source.max_days_old if source.max_days_old is not None else DEFAULT_SOURCE_MAX_DAYS_OLD
-    return _now() - timedelta(days=max(max_days_old, 1))
+    max_age_since = _now() - timedelta(days=max(max_days_old, 1))
+    latest_published_at = _latest_source_published_at(db, source)
+    if latest_published_at is None:
+        return max_age_since
+    latest_exclusive_since = latest_published_at.replace(tzinfo=None) + timedelta(microseconds=1)
+    return max(max_age_since, latest_exclusive_since)
 
 
 def _as_item(data: YouTubeVideoItem | dict[str, Any]) -> YouTubeVideoItem:
@@ -230,7 +240,11 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
     )
     try:
         if source.source_type == "channel":
-            videos = await client.get_channel_videos(source.youtube_url or source.identifier, max_count=max_count, since=_source_since(source))
+            videos = await client.get_channel_videos(
+                source.youtube_url or source.identifier,
+                max_count=max_count,
+                since=_source_since(db, source),
+            )
         elif source.source_type == "keyword":
             videos = await client.get_keyword_videos(source.identifier, max_count=max_count)
         elif source.source_type == "playlist":

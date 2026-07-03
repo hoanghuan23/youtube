@@ -24,6 +24,7 @@ def test_health_and_source_crud(client):
     assert created.status_code == 201
     source_id = created.json()["id"]
     assert created.json()["identifier"] == "demo"
+    assert created.json()["max_days_old"] == 3
     assert created.json()["subscriber_count"] is None
     assert created.json()["view_count"] is None
 

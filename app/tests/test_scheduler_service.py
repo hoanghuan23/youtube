@@ -64,7 +64,7 @@ async def test_scheduler_updates_due_video_metrics(monkeypatch, db_session):
         source_id=source.id,
         youtube_video_id="old123",
         youtube_url="https://www.youtube.com/watch?v=old123",
-        published_at=now - timedelta(days=2),
+        published_at=now - timedelta(days=4),
         next_metric_update=now - timedelta(minutes=1),
         metric_tier="bootstrap",
         is_tracked=True,

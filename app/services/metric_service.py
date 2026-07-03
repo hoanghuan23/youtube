@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import PipelineJob, Source, Video, VideoMetric
+from app.services.crawl_config import VIDEO_TRACKING_WINDOW_HOURS
 from app.services.scraper_service import add_job_log, add_task_log
 from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule, upsert_source_analytics_cache
 from app.services.youtube_client import YouTubeClient
@@ -39,7 +40,7 @@ def due_videos_for_source(db: Session, source_id: int, now: datetime) -> list[Vi
     return (
         db.query(Video)
         .filter(Video.source_id == source_id)
-        .filter(Video.published_at > now - timedelta(hours=24))
+        .filter(Video.published_at > now - timedelta(hours=VIDEO_TRACKING_WINDOW_HOURS))
         .filter(or_(Video.is_tracked.is_(True), Video.is_tracked.is_(None)))
         .filter(or_(Video.is_deleted.is_(False), Video.is_deleted.is_(None)))
         .filter(or_(Video.next_metric_update.is_(None), Video.next_metric_update <= now))

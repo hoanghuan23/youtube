@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.base import ORMBaseModel
+from app.services.crawl_config import DEFAULT_SOURCE_MAX_DAYS_OLD
 
 
 SourceType = Literal["channel", "keyword", "playlist"]
@@ -14,7 +15,7 @@ class SourceCreate(BaseModel):
     identifier: str = Field(min_length=1, max_length=255)
     display_name: str | None = None
     youtube_url: str | None = None
-    max_days_old: int | None = Field(default=7, ge=1)
+    max_days_old: int | None = Field(default=DEFAULT_SOURCE_MAX_DAYS_OLD, ge=1)
 
 
 class SourceUpdate(BaseModel):

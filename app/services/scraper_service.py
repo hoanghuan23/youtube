@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import PipelineJob, PipelineLog, Source, TaskLog, Video, VideoMetric
+from app.services.crawl_config import DEFAULT_SOURCE_MAX_DAYS_OLD
 from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule, upsert_source_analytics_cache
 from app.services.youtube_client import YouTubeClient, YouTubeVideoItem, serialize_categories
 
@@ -32,7 +33,7 @@ def _to_int(value: Any) -> int | None:
 
 
 def _source_since(source: Source) -> datetime:
-    max_days_old = source.max_days_old if source.max_days_old is not None else 1
+    max_days_old = source.max_days_old if source.max_days_old is not None else DEFAULT_SOURCE_MAX_DAYS_OLD
     return _now() - timedelta(days=max(max_days_old, 1))
 
 

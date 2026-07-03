@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.database import SessionLocal
 from app.models import Source, Video
+from app.services.crawl_config import VIDEO_TRACKING_WINDOW_HOURS
 from app.services.metric_service import update_source_metrics
 from app.services.scraper_service import crawl_source
 
@@ -45,7 +46,7 @@ def due_sources(db: Session, now: datetime, limit: int | None = None) -> list[So
 def due_videos(db: Session, now: datetime, limit: int | None = None) -> list[Video]:
     query = (
         db.query(Video)
-        .filter(Video.published_at > now - timedelta(hours=24))
+        .filter(Video.published_at > now - timedelta(hours=VIDEO_TRACKING_WINDOW_HOURS))
         .filter(or_(Video.is_tracked.is_(True), Video.is_tracked.is_(None)))
         .filter(or_(Video.is_deleted.is_(False), Video.is_deleted.is_(None)))
         .filter(or_(Video.next_metric_update.is_(None), Video.next_metric_update <= now))
@@ -59,7 +60,7 @@ def due_videos(db: Session, now: datetime, limit: int | None = None) -> list[Vid
 def expire_old_tracked_videos(db: Session, now: datetime) -> int:
     expired_count = (
         db.query(Video)
-        .filter(Video.published_at <= now - timedelta(hours=24))
+        .filter(Video.published_at <= now - timedelta(hours=VIDEO_TRACKING_WINDOW_HOURS))
         .filter(or_(Video.is_tracked.is_(True), Video.is_tracked.is_(None)))
         .filter(or_(Video.is_deleted.is_(False), Video.is_deleted.is_(None)))
         .update({Video.is_tracked: False}, synchronize_session=False)

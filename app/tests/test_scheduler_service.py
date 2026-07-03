@@ -1,13 +1,12 @@
+import asyncio
+import logging
 from datetime import datetime, timedelta
-
-import pytest
 
 from app.models import Source, Video, VideoMetric
 from app.services import scheduler_service
 
 
-@pytest.mark.asyncio
-async def test_scheduler_picks_due_source(monkeypatch, db_session):
+def test_scheduler_picks_due_source(monkeypatch, db_session, caplog):
     source = Source(source_type="keyword", identifier="python", is_active=True, is_accessible=True, created_at=datetime.utcnow())
     db_session.add(source)
     db_session.commit()
@@ -15,19 +14,30 @@ async def test_scheduler_picks_due_source(monkeypatch, db_session):
     async def fake_crawl_source(_db, _source, max_count=30):
         class Job:
             id = 99
+            status = "done"
+            videos_found = 2
+            videos_new = 1
+            items_failed = 0
 
         return Job()
 
     monkeypatch.setattr(scheduler_service, "crawl_source", fake_crawl_source)
 
-    result = await scheduler_service.run_scheduler_cycle(db_session, now=datetime.utcnow(), source_limit=10, video_limit=10)
+    with caplog.at_level(logging.INFO, logger="youtube_api.scheduler"):
+        result = asyncio.run(
+            scheduler_service.run_scheduler_cycle(db_session, now=datetime.utcnow(), source_limit=10, video_limit=10)
+        )
 
     assert result["sources_processed"] == 1
     assert result["source_job_ids"] == [99]
+    assert "Scheduler bat dau crawl new video cho source" in caplog.text
+    assert "Scheduler hoan tat crawl new video cho source" in caplog.text
+    assert "status=done" in caplog.text
+    assert "found=2" in caplog.text
+    assert "new=1" in caplog.text
 
 
-@pytest.mark.asyncio
-async def test_scheduler_updates_due_video_metrics(monkeypatch, db_session):
+def test_scheduler_updates_due_video_metrics(monkeypatch, db_session):
     now = datetime(2026, 1, 8, 12, 0, 0)
     source = Source(
         source_type="channel",
@@ -81,7 +91,7 @@ async def test_scheduler_updates_due_video_metrics(monkeypatch, db_session):
 
     monkeypatch.setattr(metric_service, "_fetch_metric", fake_fetch_metric)
 
-    result = await scheduler_service.run_scheduler_cycle(db_session, now=now, source_limit=10, video_limit=10)
+    result = asyncio.run(scheduler_service.run_scheduler_cycle(db_session, now=now, source_limit=10, video_limit=10))
 
     db_session.refresh(due_video)
     db_session.refresh(future_video)

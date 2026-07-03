@@ -149,7 +149,12 @@ def _video_to_metric(video: Video, item: YouTubeVideoItem, job_id: int, recorded
     )
 
 
-def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVideoItem | dict[str, Any]]) -> PipelineJob:
+def crawl_source_with_videos(
+    db: Session,
+    source: Source,
+    videos: list[YouTubeVideoItem | dict[str, Any]],
+    log_context: str = "crawl source",
+) -> PipelineJob:
     job = _create_job(db, source)
     items_total = 0
     videos_new = 0
@@ -216,7 +221,8 @@ def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVi
         db.commit()
         logger.exception("YouTube source crawl failed")
     logger.info(
-        "Hoan tat crawl source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s",
+        "Hoan tat %s | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s",
+        log_context,
         _source_label(source),
         source.id,
         job.id,
@@ -232,7 +238,7 @@ def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVi
 async def crawl_source(db: Session, source: Source, max_count: int = 30) -> PipelineJob:
     client = YouTubeClient(db)
     logger.info(
-        "Bat dau crawl source | source=%s id=%s type=%s max_count=%s",
+        "Bat dau crawl video 72h cho source | source=%s id=%s type=%s max_count=%s",
         _source_label(source),
         source.id,
         source.source_type,
@@ -257,7 +263,7 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
             db.commit()
             db.refresh(job)
             logger.info(
-                "Hoan tat crawl source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s error=%s",
+                "Hoan tat crawl video 72h cho source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s error=%s",
                 _source_label(source),
                 source.id,
                 job.id,
@@ -282,7 +288,7 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
         db.refresh(job)
         logger.exception("Unable to fetch YouTube videos for source %s", source.id)
         logger.info(
-            "Hoan tat crawl source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s error=%s",
+            "Hoan tat crawl video 72h cho source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s error=%s",
             _source_label(source),
             source.id,
             job.id,
@@ -293,4 +299,4 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
             job.error_message,
         )
         return job
-    return crawl_source_with_videos(db, source, videos)
+    return crawl_source_with_videos(db, source, videos, log_context="crawl video 72h cho source")

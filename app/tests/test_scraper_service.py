@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from app.models import AnalyticsCache, Source, Video, VideoMetric
@@ -60,6 +61,19 @@ def test_crawl_source_with_videos_serializes_dict_categories(db_session):
 
     assert job.status == "done"
     assert db_session.query(Video).one().categories == '["Education"]'
+
+
+def test_crawl_source_with_videos_logs_custom_context(db_session, caplog):
+    source = Source(source_type="channel", identifier="demo", is_active=True, is_accessible=True, created_at=datetime.utcnow())
+    db_session.add(source)
+    db_session.commit()
+    db_session.refresh(source)
+
+    with caplog.at_level(logging.INFO, logger="youtube_api.scraper"):
+        crawl_source_with_videos(db_session, source, [], log_context="crawl video 72h cho source")
+
+    assert "Hoan tat crawl video 72h cho source" in caplog.text
+    assert "status=done" in caplog.text
 
 
 def test_source_since_uses_latest_published_at_as_exclusive_boundary(db_session):

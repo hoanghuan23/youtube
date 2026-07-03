@@ -86,10 +86,10 @@ async def run_scheduler_cycle(
     source_jobs_failed = 0
     due_source_batch = due_sources(db, current_time, source_batch_size)
     if due_source_batch:
-        logger.info("Scheduler bat dau crawl sources | sources=%s max_count=%s", len(due_source_batch), max_count)
+        logger.info("Scheduler bat dau crawl new video sources | sources=%s max_count=%s", len(due_source_batch), max_count)
     for source in due_source_batch:
         logger.info(
-            "Scheduler chay crawl source | source=%s id=%s type=%s",
+            "Scheduler bat dau crawl new video cho source | source=%s id=%s type=%s",
             _source_label(source),
             source.id,
             source.source_type,
@@ -98,6 +98,16 @@ async def run_scheduler_cycle(
         source_job_ids.append(job.id)
         if getattr(job, "status", None) == "failed":
             source_jobs_failed += 1
+        logger.info(
+            "Scheduler hoan tat crawl new video cho source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s",
+            _source_label(source),
+            source.id,
+            job.id,
+            getattr(job, "status", None),
+            getattr(job, "videos_found", 0),
+            getattr(job, "videos_new", 0),
+            getattr(job, "items_failed", 0),
+        )
 
     metric_job_ids = []
     metric_jobs_failed = 0

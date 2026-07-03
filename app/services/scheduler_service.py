@@ -22,6 +22,12 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _source_label(source: Source | None) -> str:
+    if source is None:
+        return "unknown"
+    return source.display_name or source.identifier or source.youtube_url or f"source-{source.id}"
+
+
 def due_sources(db: Session, now: datetime, limit: int | None = None) -> list[Source]:
     query = (
         db.query(Source)
@@ -76,21 +82,57 @@ async def run_scheduler_cycle(
     videos_expired = expire_old_tracked_videos(db, current_time)
 
     source_job_ids = []
-    for source in due_sources(db, current_time, source_batch_size):
+    source_jobs_failed = 0
+    due_source_batch = due_sources(db, current_time, source_batch_size)
+    if due_source_batch:
+        logger.info("Scheduler bat dau crawl sources | sources=%s max_count=%s", len(due_source_batch), max_count)
+    for source in due_source_batch:
+        logger.info(
+            "Scheduler chay crawl source | source=%s id=%s type=%s",
+            _source_label(source),
+            source.id,
+            source.source_type,
+        )
         job = await crawl_source(db, source, max_count=max_count)
         source_job_ids.append(job.id)
+        if getattr(job, "status", None) == "failed":
+            source_jobs_failed += 1
 
     metric_job_ids = []
+    metric_jobs_failed = 0
     videos_by_source: dict[int, list[Video]] = defaultdict(list)
     due_video_batch = due_videos(db, current_time, video_batch_size)
     for video in due_video_batch:
         videos_by_source[video.source_id].append(video)
+    if videos_by_source:
+        logger.info(
+            "Scheduler bat dau cap nhat metrics | sources=%s posts=%s",
+            len(videos_by_source),
+            len(due_video_batch),
+        )
     for source_id, source_videos in videos_by_source.items():
         source = db.get(Source, source_id)
         if source is None:
             continue
+        logger.info(
+            "Scheduler chay metrics source | source=%s id=%s posts=%s",
+            _source_label(source),
+            source.id,
+            len(source_videos),
+        )
         job = await update_source_metrics(db, source, videos=source_videos, now=current_time)
         metric_job_ids.append(job.id)
+        if getattr(job, "status", None) == "failed":
+            metric_jobs_failed += 1
+
+    logger.info(
+        "Scheduler hoan tat chu ky | sources_processed=%s posts_processed=%s posts_expired=%s source_failed=%s metric_failed=%s",
+        len(source_job_ids),
+        len(due_video_batch),
+        videos_expired,
+        source_jobs_failed,
+        metric_jobs_failed,
+    )
 
     return {
         "sources_processed": len(source_job_ids),
@@ -98,6 +140,8 @@ async def run_scheduler_cycle(
         "videos_expired": videos_expired,
         "source_job_ids": source_job_ids,
         "metric_job_ids": metric_job_ids,
+        "source_jobs_failed": source_jobs_failed,
+        "metric_jobs_failed": metric_jobs_failed,
     }
 
 
@@ -109,5 +153,7 @@ async def run_scheduler_forever() -> None:
         db = SessionLocal()
         try:
             await run_scheduler_cycle(db)
+        except Exception:
+            logger.exception("Scheduler cycle failed")
         finally:
             db.close()

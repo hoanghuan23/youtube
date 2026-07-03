@@ -16,6 +16,12 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _source_label(source: Source | None) -> str:
+    if source is None:
+        return "unknown"
+    return source.display_name or source.identifier or source.youtube_url or f"source-{source.id}"
+
+
 def _to_int(value: Any) -> int | None:
     if value is None:
         return None
@@ -222,12 +228,29 @@ def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVi
         add_task_log(db, job)
         db.commit()
         logger.exception("YouTube source crawl failed")
+    logger.info(
+        "Hoan tat crawl source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s",
+        _source_label(source),
+        source.id,
+        job.id,
+        job.status,
+        job.videos_found,
+        job.videos_new,
+        job.items_failed,
+    )
     db.refresh(job)
     return job
 
 
 async def crawl_source(db: Session, source: Source, max_count: int = 30) -> PipelineJob:
     client = YouTubeClient(db)
+    logger.info(
+        "Bat dau crawl source | source=%s id=%s type=%s max_count=%s",
+        _source_label(source),
+        source.id,
+        source.source_type,
+        max_count,
+    )
     try:
         if source.source_type == "channel":
             videos = await client.get_channel_videos(source.youtube_url or source.identifier, max_count=max_count, since=_source_since(source))
@@ -242,6 +265,17 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
             job.finished_at = _now()
             db.commit()
             db.refresh(job)
+            logger.info(
+                "Hoan tat crawl source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s error=%s",
+                _source_label(source),
+                source.id,
+                job.id,
+                job.status,
+                job.videos_found,
+                job.videos_new,
+                job.items_failed,
+                job.error_message,
+            )
             return job
     except Exception as exc:
         job = _create_job(db, source)
@@ -256,5 +290,16 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
         db.commit()
         db.refresh(job)
         logger.exception("Unable to fetch YouTube videos for source %s", source.id)
+        logger.info(
+            "Hoan tat crawl source | source=%s id=%s job_id=%s status=%s found=%s new=%s failed=%s error=%s",
+            _source_label(source),
+            source.id,
+            job.id,
+            job.status,
+            job.videos_found,
+            job.videos_new,
+            job.items_failed,
+            job.error_message,
+        )
         return job
     return crawl_source_with_videos(db, source, videos)

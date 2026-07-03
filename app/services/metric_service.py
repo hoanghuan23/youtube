@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -12,8 +13,17 @@ from app.services.tier_service import metric_tier_from_metric, next_metric_updat
 from app.services.youtube_client import YouTubeClient
 
 
+logger = logging.getLogger("youtube_api.metrics")
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _source_label(source: Source | None) -> str:
+    if source is None:
+        return "unknown"
+    return source.display_name or source.identifier or source.youtube_url or f"source-{source.id}"
 
 
 def _to_int(value: Any) -> int | None:
@@ -80,6 +90,13 @@ def _record_metric(db: Session, video: Video, metrics: dict[str, Any], job: Pipe
 async def update_video_metric(db: Session, video: Video) -> PipelineJob:
     source = db.get(Source, video.source_id)
     job = _create_metric_job(db, source)
+    logger.info(
+        "Bat dau cap nhat metric | source=%s id=%s video_id=%s job_id=%s",
+        _source_label(source),
+        source.id if source else None,
+        video.id,
+        job.id,
+    )
     try:
         metrics = await _fetch_metric(video)
         _record_metric(db, video, metrics, job, _now())
@@ -96,6 +113,16 @@ async def update_video_metric(db: Session, video: Video) -> PipelineJob:
         add_job_log(db, job, "Metric update failed", "ERROR", type(exc).__name__, str(exc))
         add_task_log(db, job)
         db.commit()
+    logger.info(
+        "Hoan tat cap nhat metric | source=%s id=%s video_id=%s job_id=%s status=%s updated=%s failed=%s",
+        _source_label(source),
+        source.id if source else None,
+        video.id,
+        job.id,
+        job.status,
+        job.items_updated,
+        job.items_failed,
+    )
     db.refresh(job)
     return job
 
@@ -109,6 +136,13 @@ async def update_source_metrics(
     current_time = now or _now()
     videos = videos if videos is not None else due_videos_for_source(db, source.id, current_time)
     job = _create_metric_job(db, source, items_total=len(videos))
+    logger.info(
+        "Bat dau cap nhat metrics | source=%s id=%s posts=%s job_id=%s",
+        _source_label(source),
+        source.id,
+        len(videos),
+        job.id,
+    )
     try:
         for video in videos:
             metrics = await _fetch_metric(video)
@@ -128,5 +162,14 @@ async def update_source_metrics(
         add_job_log(db, job, "Source metric update failed", "ERROR", type(exc).__name__, str(exc))
         add_task_log(db, job)
         db.commit()
+    logger.info(
+        "Hoan tat cap nhat metrics | source=%s id=%s job_id=%s status=%s updated=%s failed=%s",
+        _source_label(source),
+        source.id,
+        job.id,
+        job.status,
+        job.items_updated,
+        job.items_failed,
+    )
     db.refresh(job)
     return job

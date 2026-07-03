@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import Channel, PipelineJob, PipelineLog, Source, TaskLog, Video, VideoMetric
+from app.models import PipelineJob, PipelineLog, Source, TaskLog, Video, VideoMetric
 from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule, upsert_source_analytics_cache
 from app.services.youtube_client import YouTubeClient, YouTubeVideoItem, serialize_categories
 
@@ -124,28 +124,6 @@ def _create_job(db: Session, source: Source, job_type: str = "scraper_job") -> P
     return job
 
 
-def _upsert_channel(db: Session, item: YouTubeVideoItem) -> Channel | None:
-    channel_data = item.channel or {}
-    youtube_channel_id = channel_data.get("youtube_channel_id") or channel_data.get("channel_id")
-    if not youtube_channel_id:
-        return None
-    channel = db.query(Channel).filter(Channel.youtube_channel_id == youtube_channel_id).first()
-    if channel is None:
-        channel = Channel(youtube_channel_id=youtube_channel_id, created_at=_now())
-        db.add(channel)
-    channel.channel_handle = channel_data.get("channel_handle") or channel_data.get("handle")
-    channel.channel_title = channel_data.get("channel_title") or channel_data.get("title") or channel_data.get("channel_name")
-    channel.channel_url = channel_data.get("channel_url") or channel_data.get("url")
-    channel.thumbnail_url = channel_data.get("thumbnail_url")
-    channel.subscriber_count = _to_int(channel_data.get("subscriber_count"))
-    channel.video_count = _to_int(channel_data.get("video_count"))
-    channel.view_count = _to_int(channel_data.get("view_count"))
-    channel.description = channel_data.get("description")
-    channel.last_updated = _now()
-    db.flush()
-    return channel
-
-
 def _video_to_metric(video: Video, item: YouTubeVideoItem, job_id: int, recorded_at: datetime) -> VideoMetric | None:
     metrics = item.metrics or {}
     if not metrics:
@@ -174,10 +152,8 @@ def crawl_source_with_videos(db: Session, source: Source, videos: list[YouTubeVi
             if db.query(Video).filter(Video.youtube_video_id == item.youtube_video_id).first():
                 continue
 
-            channel = _upsert_channel(db, item)
             video = Video(
                 source_id=source.id,
-                channel_id=channel.id if channel else None,
                 youtube_video_id=item.youtube_video_id,
                 youtube_url=item.youtube_url,
                 title=item.title,

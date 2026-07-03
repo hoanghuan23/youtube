@@ -9,7 +9,6 @@ class Video(Base):
 
     id = Column(Integer, primary_key=True)
     source_id = Column(Integer, ForeignKey("sources.id"), nullable=False)
-    channel_id = Column(Integer, ForeignKey("channels.id"))
     youtube_video_id = Column(String(100), nullable=False, unique=True)
     youtube_url = Column(String(500), nullable=False)
     title = Column(String(500))
@@ -31,6 +30,5 @@ class Video(Base):
     metric_scan_miss_count = Column(Integer, nullable=False, default=0)
 
     source = relationship("Source", back_populates="videos")
-    channel = relationship("Channel", back_populates="videos")
     metrics = relationship("VideoMetric", back_populates="video", order_by="VideoMetric.recorded_at")
     comments = relationship("Comment", back_populates="video")

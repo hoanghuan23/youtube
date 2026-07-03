@@ -16,7 +16,6 @@ class VideoMetricRead(ORMBaseModel):
 class VideoRead(ORMBaseModel):
     id: int
     source_id: int
-    channel_id: int | None = None
     youtube_video_id: str
     youtube_url: str
     title: str | None = None

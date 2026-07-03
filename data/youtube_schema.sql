@@ -67,47 +67,11 @@ CREATE INDEX idx_youtube_sources_next_scrape
 ON sources (next_scrape);
 
 
--- bảng channels lưu thông tin kênh YouTube
--- Tách riêng để tránh lặp lại channel_title, subscriber_count ở nhiều video
-CREATE TABLE channels (
-    id INTEGER NOT NULL,
-
-    youtube_channel_id VARCHAR(100) NOT NULL,
-    channel_handle VARCHAR(255),
-    channel_title VARCHAR(255),
-    channel_url VARCHAR(500),
-
-    thumbnail_url VARCHAR(500),
-
-    subscriber_count INTEGER,
-    video_count INTEGER,
-    view_count INTEGER,
-
-    is_verified BOOLEAN,
-    description TEXT,
-
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_updated DATETIME,
-
-    PRIMARY KEY (id)
-);
-
-CREATE UNIQUE INDEX ix_channels_youtube_channel_id 
-ON channels (youtube_channel_id);
-
-CREATE INDEX idx_channels_handle 
-ON channels (channel_handle);
-
-CREATE INDEX idx_channels_title 
-ON channels (channel_title);
-
-
 -- bảng videos lưu thông tin video YouTube
 CREATE TABLE videos (
     id INTEGER NOT NULL,
 
     source_id INTEGER NOT NULL,
-    channel_id INTEGER,
 
     youtube_video_id VARCHAR(100) NOT NULL,
     youtube_url VARCHAR(500) NOT NULL,
@@ -148,7 +112,6 @@ CREATE TABLE videos (
     PRIMARY KEY (id),
 
     FOREIGN KEY (source_id) REFERENCES sources (id),
-    FOREIGN KEY (channel_id) REFERENCES channels (id),
 
     CONSTRAINT ck_youtube_video_metric_tier
         CHECK (metric_tier IN (
@@ -166,9 +129,6 @@ ON videos (youtube_video_id);
 
 CREATE INDEX idx_videos_source 
 ON videos (source_id);
-
-CREATE INDEX idx_videos_channel 
-ON videos (channel_id);
 
 CREATE INDEX idx_videos_published_at 
 ON videos (published_at);

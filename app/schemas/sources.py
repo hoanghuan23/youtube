@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.base import ORMBaseModel
 from app.services.crawl_config import DEFAULT_SOURCE_MAX_DAYS_OLD
@@ -12,10 +12,18 @@ SourceType = Literal["channel", "keyword", "playlist"]
 
 class SourceCreate(BaseModel):
     source_type: SourceType
-    identifier: str = Field(min_length=1, max_length=255)
+    identifier: str | None = Field(default=None, min_length=1, max_length=255)
     display_name: str | None = None
     youtube_url: str | None = None
     max_days_old: int | None = Field(default=DEFAULT_SOURCE_MAX_DAYS_OLD, ge=1)
+
+    @model_validator(mode="after")
+    def require_identifier_or_channel_url(self) -> "SourceCreate":
+        if self.identifier:
+            return self
+        if self.source_type == "channel" and self.youtube_url:
+            return self
+        raise ValueError("identifier is required unless channel source has youtube_url")
 
 
 class SourceUpdate(BaseModel):

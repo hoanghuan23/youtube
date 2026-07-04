@@ -236,6 +236,8 @@ def extract_channel_info(channel_url: str) -> dict[str, Any]:
     )
 
     return {
+        "identifier": channel_handle.lstrip("@") if channel_handle else youtube_channel_id,
+        "display_name": channel_title,
         "url": canonical_url,
         "video_count": video_count,
         "view_count": view_count,

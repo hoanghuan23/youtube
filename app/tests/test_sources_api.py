@@ -90,6 +90,55 @@ def test_create_channel_source_updates_source_metrics(client, monkeypatch):
     assert listed.json()[0]["view_count"] == 4_560_000
 
 
+def test_create_channel_source_from_youtube_url_extracts_identifier_and_display_name(client, monkeypatch):
+    def fake_extract_channel_info(url):
+        assert url == "https://www.youtube.com/@vothuat.channel"
+        return {
+            "identifier": "vothuat.channel",
+            "display_name": "Võ thuật Channel",
+            "subscriber_count": 123_000,
+            "view_count": 4_560_000,
+        }
+
+    monkeypatch.setattr(sources_router.youtube_channel_about, "extract_channel_info", fake_extract_channel_info)
+
+    created = client.post(
+        "/sources",
+        json={
+            "source_type": "channel",
+            "youtube_url": "https://www.youtube.com/@vothuat.channel",
+            "max_days_old": 3,
+        },
+    )
+
+    assert created.status_code == 201
+    assert created.json()["identifier"] == "vothuat.channel"
+    assert created.json()["display_name"] == "Võ thuật Channel"
+    assert created.json()["youtube_url"] == "https://www.youtube.com/@vothuat.channel"
+    assert created.json()["max_days_old"] == 3
+    assert created.json()["subscriber_count"] == 123_000
+    assert created.json()["view_count"] == 4_560_000
+
+
+def test_create_channel_source_from_youtube_url_supports_channel_handle_info(client, monkeypatch):
+    def fake_extract_channel_info(_url):
+        return {
+            "channel_handle": "@demo",
+            "channel_title": "Demo Channel",
+        }
+
+    monkeypatch.setattr(sources_router.youtube_channel_about, "extract_channel_info", fake_extract_channel_info)
+
+    created = client.post(
+        "/sources",
+        json={"source_type": "channel", "youtube_url": "https://www.youtube.com/@demo"},
+    )
+
+    assert created.status_code == 201
+    assert created.json()["identifier"] == "demo"
+    assert created.json()["display_name"] == "Demo Channel"
+
+
 def test_create_channel_source_keeps_null_metrics_when_fetch_fails(client, monkeypatch):
     def raise_extract_channel_info(_url):
         raise RuntimeError("youtube unavailable")

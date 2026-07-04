@@ -29,6 +29,8 @@ def _normalize_identifier(source_type: str, identifier: str) -> str:
             for part in parts:
                 if part.startswith("@"):
                     return part.lstrip("@")
+            if len(parts) > 1 and parts[0] in {"channel", "c", "user"}:
+                return parts[1]
             if parts:
                 return parts[0]
         return value.lstrip("@")
@@ -57,12 +59,41 @@ def _fetch_channel_info(youtube_url: str | None) -> dict | None:
         return None
 
 
+def _channel_identifier_from_info(channel_info: dict | None) -> str | None:
+    if not channel_info:
+        return None
+    identifier = channel_info.get("identifier")
+    if isinstance(identifier, str) and identifier.strip():
+        return identifier.strip().lstrip("@")
+    channel_handle = channel_info.get("channel_handle")
+    if isinstance(channel_handle, str) and channel_handle.strip():
+        return channel_handle.strip().lstrip("@")
+    youtube_channel_id = channel_info.get("youtube_channel_id")
+    if isinstance(youtube_channel_id, str) and youtube_channel_id.strip():
+        return youtube_channel_id.strip()
+    return None
+
+
+def _channel_display_name_from_info(channel_info: dict | None) -> str | None:
+    if not channel_info:
+        return None
+    for key in ("display_name", "channel_title"):
+        value = channel_info.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 @router.post("", response_model=SourceRead, status_code=status.HTTP_201_CREATED)
 async def create_source(payload: SourceCreate, db: Session = Depends(get_db)) -> Source:
-    identifier = _normalize_identifier(payload.source_type, payload.identifier)
+    raw_identifier = payload.identifier or payload.youtube_url
+    if raw_identifier is None:
+        raise HTTPException(status_code=422, detail="identifier or youtube_url is required")
+
+    identifier = _normalize_identifier(payload.source_type, raw_identifier)
     explicit_url = payload.youtube_url
-    if payload.source_type == "channel" and not explicit_url and payload.identifier.strip().startswith(("http://", "https://")):
-        explicit_url = payload.identifier
+    if payload.source_type == "channel" and not explicit_url and raw_identifier.strip().startswith(("http://", "https://")):
+        explicit_url = raw_identifier
     youtube_url = _source_url(payload.source_type, identifier, explicit_url)
     existing = (
         db.query(Source)
@@ -75,10 +106,14 @@ async def create_source(payload: SourceCreate, db: Session = Depends(get_db)) ->
         raise HTTPException(status_code=400, detail="Source already exists")
 
     channel_info = _fetch_channel_info(youtube_url) if payload.source_type == "channel" else None
+    if payload.source_type == "channel":
+        identifier = _channel_identifier_from_info(channel_info) or identifier
+        if not identifier:
+            raise HTTPException(status_code=400, detail="Unable to extract YouTube channel identifier")
     source = Source(
         source_type=payload.source_type,
         identifier=identifier,
-        display_name=payload.display_name or (channel_info or {}).get("channel_title"),
+        display_name=payload.display_name or _channel_display_name_from_info(channel_info),
         youtube_url=youtube_url,
         subscriber_count=(channel_info or {}).get("subscriber_count"),
         view_count=(channel_info or {}).get("view_count"),

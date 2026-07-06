@@ -183,6 +183,12 @@ class YouTubeClient:
             playlist_info = ydl.extract_info(channel_videos_url, download=False)
 
         entries = (playlist_info or {}).get("entries") or []
+        if not entries:
+            logger.warning(
+                "No YouTube channel videos extracted | url=%s title=%s",
+                channel_videos_url,
+                (playlist_info or {}).get("title"),
+            )
         videos: list[YouTubeVideoItem] = []
         since_naive = since.replace(tzinfo=None) if since and since.tzinfo else since
 

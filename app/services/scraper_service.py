@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models import PipelineJob, PipelineLog, Source, TaskLog, Video, VideoMetric
 from app.services.crawl_config import DEFAULT_SOURCE_MAX_DAYS_OLD
 from app.services.tier_service import metric_tier_from_metric, next_metric_update_at, refresh_source_schedule, upsert_source_analytics_cache
-from app.services.youtube_client import YouTubeClient, YouTubeVideoItem, serialize_categories
+from app.services.youtube_client import YouTubeClient, YouTubeExtractionIssue, YouTubeVideoItem, serialize_categories
 
 
 logger = logging.getLogger("youtube_api.scraper")
@@ -154,8 +154,9 @@ def crawl_source_with_videos(
     source: Source,
     videos: list[YouTubeVideoItem | dict[str, Any]],
     log_context: str = "crawl source",
+    job: PipelineJob | None = None,
 ) -> PipelineJob:
-    job = _create_job(db, source)
+    job = job or _create_job(db, source)
     items_total = 0
     videos_new = 0
     try:
@@ -236,7 +237,20 @@ def crawl_source_with_videos(
 
 
 async def crawl_source(db: Session, source: Source, max_count: int = 30) -> PipelineJob:
-    client = YouTubeClient(db)
+    job = _create_job(db, source)
+
+    def add_youtube_issue_log(issue: YouTubeExtractionIssue) -> None:
+        add_job_log(
+            db,
+            job,
+            issue.message,
+            issue.log_level,
+            issue.error_type,
+            issue.error_details,
+        )
+        job.items_failed += 1
+
+    client = YouTubeClient(db, issue_handler=add_youtube_issue_log)
     logger.info(
         "Bat dau crawl video 72h cho source | source=%s id=%s type=%s max_count=%s",
         _source_label(source),
@@ -256,7 +270,6 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
         elif source.source_type == "playlist":
             videos = await client.get_playlist_videos(source.identifier, max_count=max_count)
         else:
-            job = _create_job(db, source)
             job.status = "failed"
             job.error_message = f"Unsupported source_type={source.source_type}"
             job.finished_at = _now()
@@ -275,7 +288,6 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
             )
             return job
     except Exception as exc:
-        job = _create_job(db, source)
         job.status = "failed"
         job.error_message = str(exc)
         job.items_failed = 1
@@ -299,4 +311,4 @@ async def crawl_source(db: Session, source: Source, max_count: int = 30) -> Pipe
             job.error_message,
         )
         return job
-    return crawl_source_with_videos(db, source, videos, log_context="crawl video 72h cho source")
+    return crawl_source_with_videos(db, source, videos, log_context="crawl video 72h cho source", job=job)

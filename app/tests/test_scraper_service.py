@@ -1,10 +1,11 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta
 
-from app.models import AnalyticsCache, Source, Video, VideoMetric
+from app.models import AnalyticsCache, PipelineLog, Source, Video, VideoMetric
 from app.services import scraper_service
 from app.services.scraper_service import crawl_source_with_videos
-from app.services.youtube_client import YouTubeVideoItem
+from app.services.youtube_client import YouTubeExtractionIssue, YouTubeVideoItem
 
 
 def test_crawl_source_with_videos_creates_video_metric_and_job(db_session):
@@ -102,3 +103,45 @@ def test_source_since_uses_latest_published_at_as_exclusive_boundary(db_session)
     db_session.commit()
 
     assert scraper_service._source_since(db_session, source) == latest_published_at + timedelta(microseconds=1)
+
+
+def test_crawl_source_writes_antibot_issue_to_pipeline_log(monkeypatch, db_session):
+    source = Source(
+        source_type="channel",
+        identifier="demo",
+        is_active=True,
+        is_accessible=True,
+        created_at=datetime.utcnow(),
+    )
+    db_session.add(source)
+    db_session.commit()
+    db_session.refresh(source)
+
+    class FakeYouTubeClient:
+        def __init__(self, _db, issue_handler=None):
+            self.issue_handler = issue_handler
+
+        async def get_channel_videos(self, _identifier, max_count=30, since=None):
+            self.issue_handler(
+                YouTubeExtractionIssue(
+                    video_url="https://www.youtube.com/watch?v=protected",
+                    message="YouTube anti-bot/check-bot detected while extracting video info",
+                    log_level="WARNING",
+                    error_type="YouTubeAntiBotError",
+                    error_details="ERROR: secretstorage not available. Sign in to confirm you're not a bot.",
+                )
+            )
+            return []
+
+    monkeypatch.setattr(scraper_service, "YouTubeClient", FakeYouTubeClient)
+
+    job = asyncio.run(scraper_service.crawl_source(db_session, source))
+    log = db_session.query(PipelineLog).one()
+
+    assert job.status == "done"
+    assert job.items_failed == 1
+    assert log.job_id == job.id
+    assert log.source_id == source.id
+    assert log.log_level == "WARNING"
+    assert log.error_type == "YouTubeAntiBotError"
+    assert "not a bot" in log.error_details

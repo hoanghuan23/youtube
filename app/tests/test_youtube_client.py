@@ -202,3 +202,39 @@ def test_extract_channel_videos_skips_unreleased_premiere(monkeypatch):
     )
 
     assert [video.youtube_video_id for video in videos] == ["ready", "after-premiere"]
+
+
+def test_extract_channel_videos_reports_antibot_issue(monkeypatch):
+    issues = []
+    client = YouTubeClient(issue_handler=issues.append)
+
+    class FakeYoutubeDL:
+        def __init__(self, _opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def extract_info(self, _url, download=False):
+            assert download is False
+            return {"entries": [{"id": "protected"}]}
+
+    def fake_extract_video_info(_video_url):
+        raise DownloadError(
+            "ERROR: secretstorage not available as the `secretstorage` module is not installed. "
+            "Sign in to confirm you're not a bot."
+        )
+
+    monkeypatch.setattr(client, "_load_youtube_dl", lambda: FakeYoutubeDL)
+    monkeypatch.setattr(client, "_extract_video_info", fake_extract_video_info)
+
+    videos = client._extract_channel_videos("https://www.youtube.com/@demo/videos", max_count=30, since=None)
+
+    assert videos == []
+    assert len(issues) == 1
+    assert issues[0].error_type == "YouTubeAntiBotError"
+    assert issues[0].log_level == "WARNING"
+    assert "protected" in issues[0].video_url

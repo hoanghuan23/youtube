@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from yt_dlp.utils import DownloadError
 
@@ -12,6 +12,15 @@ from sqlalchemy.orm import Session
 
 
 logger = logging.getLogger("youtube_api.youtube_client")
+
+
+@dataclass(slots=True)
+class YouTubeExtractionIssue:
+    video_url: str
+    message: str
+    log_level: str
+    error_type: str
+    error_details: str
 
 
 @dataclass(slots=True)
@@ -41,8 +50,13 @@ def serialize_categories(value: Any) -> str | None:
 class YouTubeClient:
     """Small yt-dlp wrapper used by scraper jobs."""
 
-    def __init__(self, db: Session | None = None) -> None:
+    def __init__(
+        self,
+        db: Session | None = None,
+        issue_handler: Callable[[YouTubeExtractionIssue], None] | None = None,
+    ) -> None:
         self.db = db
+        self.issue_handler = issue_handler
 
     async def get_channel_videos(
         self,
@@ -119,6 +133,42 @@ class YouTubeClient:
             or "private video" in msg
             or "video unavailable" in msg
             or "members-only" in msg
+        )
+
+    @staticmethod
+    def _is_antibot_error(error: Exception) -> bool:
+        msg = str(error).lower()
+        return any(
+            marker in msg
+            for marker in (
+                "sign in to confirm",
+                "not a bot",
+                "check bot",
+                "anti-bot",
+                "captcha",
+                "too many requests",
+                "http error 429",
+                "rate limit",
+                "secretstorage not available",
+            )
+        )
+
+    def _report_extraction_issue(self, video_url: str, error: Exception) -> None:
+        if not self.issue_handler:
+            return
+        is_antibot = self._is_antibot_error(error)
+        self.issue_handler(
+            YouTubeExtractionIssue(
+                video_url=video_url,
+                message=(
+                    "YouTube anti-bot/check-bot detected while extracting video info"
+                    if is_antibot
+                    else "Error extracting YouTube video info"
+                ),
+                log_level="WARNING" if is_antibot else "ERROR",
+                error_type="YouTubeAntiBotError" if is_antibot else type(error).__name__,
+                error_details=f"url={video_url} error={error}",
+            )
         )
 
     def _extract_raw_video_info(self, video_url: str) -> dict[str, Any]:
@@ -205,6 +255,7 @@ class YouTubeClient:
                     logger.warning("Skip unavailable YouTube video | url=%s error=%s", video_url, e)
                     continue
                 logger.warning("Error extracting YouTube video info | url=%s error=%s", video_url, e)
+                self._report_extraction_issue(video_url, e)
                 continue
 
             if since_naive and item.published_at and item.published_at < since_naive:

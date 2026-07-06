@@ -93,6 +93,12 @@ def _is_skippable_metric_error(exc: Exception) -> bool:
     return isinstance(exc, DownloadError) and YouTubeClient._is_skippable_video_error(exc)
 
 
+def _metric_error_message(exc: Exception, default_message: str) -> tuple[str, str]:
+    if YouTubeClient._is_antibot_error(exc):
+        return "YouTube anti-bot/check-bot detected during metric update", "YouTubeAntiBotError"
+    return default_message, type(exc).__name__
+
+
 def _mark_video_unavailable(db: Session, video: Video, job: PipelineJob, exc: Exception, recorded_at: datetime) -> None:
     video.is_tracked = False
     video.is_deleted = True
@@ -138,7 +144,8 @@ async def update_video_metric(db: Session, video: Video) -> PipelineJob:
             job.error_message = str(exc)
             job.items_failed = 1
             job.finished_at = _now()
-            add_job_log(db, job, "Metric update failed", "ERROR", type(exc).__name__, str(exc))
+            log_message, error_type = _metric_error_message(exc, "Metric update failed")
+            add_job_log(db, job, log_message, "ERROR", error_type, str(exc))
             add_task_log(db, job)
             db.commit()
     logger.info(
@@ -194,7 +201,8 @@ async def update_source_metrics(
         job.error_message = str(exc)
         job.items_failed = max(job.items_failed, 1)
         job.finished_at = _now()
-        add_job_log(db, job, "Source metric update failed", "ERROR", type(exc).__name__, str(exc))
+        log_message, error_type = _metric_error_message(exc, "Source metric update failed")
+        add_job_log(db, job, log_message, "ERROR", error_type, str(exc))
         add_task_log(db, job)
         db.commit()
     logger.info(

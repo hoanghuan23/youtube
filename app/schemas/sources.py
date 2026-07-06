@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.base import ORMBaseModel
 from app.services.crawl_config import DEFAULT_SOURCE_MAX_DAYS_OLD
@@ -11,6 +11,18 @@ SourceType = Literal["channel", "keyword", "playlist"]
 
 
 class SourceCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "source_type": "channel",
+                    "youtube_url": "link_youtube_url",
+                    "max_days_old": DEFAULT_SOURCE_MAX_DAYS_OLD,
+                }
+            ]
+        }
+    )
+
     source_type: SourceType
     identifier: str | None = Field(default=None, min_length=1, max_length=255)
     display_name: str | None = None

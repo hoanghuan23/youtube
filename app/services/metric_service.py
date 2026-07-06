@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from yt_dlp.utils import DownloadError
 
 from app.core.config import get_settings
 from app.models import PipelineJob, Source, Video, VideoMetric
@@ -88,6 +89,25 @@ def _record_metric(db: Session, video: Video, metrics: dict[str, Any], job: Pipe
     video.metric_scan_miss_count = 0
 
 
+def _is_skippable_metric_error(exc: Exception) -> bool:
+    return isinstance(exc, DownloadError) and YouTubeClient._is_skippable_video_error(exc)
+
+
+def _mark_video_unavailable(db: Session, video: Video, job: PipelineJob, exc: Exception, recorded_at: datetime) -> None:
+    video.is_tracked = False
+    video.is_deleted = True
+    video.next_metric_update = None
+    video.last_metric_update = recorded_at
+    add_job_log(db, job, "Skip unavailable video metric", "WARNING", type(exc).__name__, str(exc))
+    logger.warning(
+        "Skip unavailable video metric | video_id=%s youtube_video_id=%s url=%s error=%s",
+        video.id,
+        video.youtube_video_id,
+        video.youtube_url,
+        exc,
+    )
+
+
 async def update_video_metric(db: Session, video: Video) -> PipelineJob:
     source = db.get(Source, video.source_id)
     job = _create_metric_job(db, source)
@@ -107,13 +127,20 @@ async def update_video_metric(db: Session, video: Video) -> PipelineJob:
         add_task_log(db, job)
         db.commit()
     except Exception as exc:
-        job.status = "failed"
-        job.error_message = str(exc)
-        job.items_failed = 1
-        job.finished_at = _now()
-        add_job_log(db, job, "Metric update failed", "ERROR", type(exc).__name__, str(exc))
-        add_task_log(db, job)
-        db.commit()
+        if _is_skippable_metric_error(exc):
+            _mark_video_unavailable(db, video, job, exc, _now())
+            job.status = "done"
+            job.finished_at = _now()
+            add_task_log(db, job)
+            db.commit()
+        else:
+            job.status = "failed"
+            job.error_message = str(exc)
+            job.items_failed = 1
+            job.finished_at = _now()
+            add_job_log(db, job, "Metric update failed", "ERROR", type(exc).__name__, str(exc))
+            add_task_log(db, job)
+            db.commit()
     logger.info(
         "Hoan tat cap nhat metric | source=%s id=%s video_id=%s job_id=%s status=%s updated=%s failed=%s",
         _source_label(source),
@@ -146,9 +173,16 @@ async def update_source_metrics(
     )
     try:
         for video in videos:
-            metrics = await _fetch_metric(video)
-            _record_metric(db, video, metrics, job, current_time)
-            job.items_updated += 1
+            try:
+                metrics = await _fetch_metric(video)
+            except Exception as exc:
+                if _is_skippable_metric_error(exc):
+                    _mark_video_unavailable(db, video, job, exc, current_time)
+                    continue
+                raise
+            else:
+                _record_metric(db, video, metrics, job, current_time)
+                job.items_updated += 1
         upsert_source_analytics_cache(db, source, current_time)
         refresh_source_schedule(db, source, current_time)
         job.status = "done"

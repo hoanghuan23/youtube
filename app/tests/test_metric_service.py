@@ -72,7 +72,15 @@ async def test_update_video_metric_skips_private_video(monkeypatch, db_session):
 @pytest.mark.asyncio
 async def test_update_source_metrics_refreshes_analytics_and_source_tier(monkeypatch, db_session):
     now = datetime(2026, 1, 8, 12, 0, 0)
-    source = Source(source_type="channel", identifier="demo", is_active=True, is_accessible=True, created_at=now)
+    original_next_scrape = datetime(2026, 1, 8, 18, 0, 0)
+    source = Source(
+        source_type="channel",
+        identifier="demo",
+        is_active=True,
+        is_accessible=True,
+        created_at=now,
+        next_scrape=original_next_scrape,
+    )
     db_session.add(source)
     db_session.flush()
     video = Video(
@@ -99,7 +107,7 @@ async def test_update_source_metrics_refreshes_analytics_and_source_tier(monkeyp
     assert cache.total_videos == 1
     assert cache.total_views == 10_000
     assert source.schedule_tier == 2
-    assert source.next_scrape is not None
+    assert source.next_scrape == original_next_scrape
 
 
 @pytest.mark.asyncio
